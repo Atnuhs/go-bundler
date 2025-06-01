@@ -468,6 +468,7 @@ func (b *Bundler) processFile(file *ast.File, pkgPrefix, depPath string, output 
 		usedSymbols = make(map[string]bool)
 	}
 	
+	
 	// Create a map to track original type names to prefixed names
 	typeMap := make(map[string]string)
 	
@@ -519,14 +520,24 @@ func (b *Bundler) processFile(file *ast.File, pkgPrefix, depPath string, output 
 				d.Name.Name = pkgPrefix + "_" + d.Name.Name
 			} else if d.Name.IsExported() && d.Recv != nil {
 				// For methods, check if the receiver type is used
+				var receiverTypeName string
 				if starExpr, ok := d.Recv.List[0].Type.(*ast.StarExpr); ok {
 					if ident, ok := starExpr.X.(*ast.Ident); ok {
-						if !usedSymbols[ident.Name] {
-							continue // Skip methods of unused types
-						}
+						receiverTypeName = ident.Name
 					}
 				} else if ident, ok := d.Recv.List[0].Type.(*ast.Ident); ok {
-					if !usedSymbols[ident.Name] {
+					receiverTypeName = ident.Name
+				}
+				
+				if receiverTypeName != "" {
+					// Remove prefix to get original type name
+					originalTypeName := receiverTypeName
+					if strings.HasPrefix(receiverTypeName, pkgPrefix+"_") {
+						originalTypeName = strings.TrimPrefix(receiverTypeName, pkgPrefix+"_")
+					}
+					
+					
+					if !usedSymbols[originalTypeName] {
 						continue // Skip methods of unused types
 					}
 				}
@@ -552,9 +563,17 @@ func (b *Bundler) processFile(file *ast.File, pkgPrefix, depPath string, output 
 			for _, spec := range d.Specs {
 				switch s := spec.(type) {
 				case *ast.TypeSpec:
-					if s.Name.IsExported() && usedSymbols[s.Name.Name] {
+					// Get original name before any transformations
+					originalTypeName := s.Name.Name
+					if strings.HasPrefix(s.Name.Name, pkgPrefix+"_") {
+						originalTypeName = strings.TrimPrefix(s.Name.Name, pkgPrefix+"_")
+					}
+					
+					// Check if original type name was exported and is used
+					originalNameWasExported := len(originalTypeName) > 0 && originalTypeName[0] >= 'A' && originalTypeName[0] <= 'Z'
+					if originalNameWasExported && usedSymbols[originalTypeName] {
 						// Apply prefix using the typeMap
-						if newName, exists := typeMap[s.Name.Name]; exists {
+						if newName, exists := typeMap[originalTypeName]; exists {
 							s.Name.Name = newName
 						}
 						filteredSpecs = append(filteredSpecs, s)
