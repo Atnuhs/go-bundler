@@ -14,53 +14,18 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-type DependencyAnalyzer struct {
-	fset     *token.FileSet
-	pkgCache map[string]*packages.Package
-}
-
-func NewDependencyAnalyzer() *DependencyAnalyzer {
-	return &DependencyAnalyzer{
-		fset:     token.NewFileSet(),
-		pkgCache: make(map[string]*packages.Package),
-	}
-}
-
-type ASTTransformer struct {
-	fset *token.FileSet
-}
-
-func NewASTTransformer(fset *token.FileSet) *ASTTransformer {
-	return &ASTTransformer{
-		fset: fset,
-	}
-}
-
-type FileGenerator struct {
-	fset *token.FileSet
-}
-
-func NewFileGenerator(fset *token.FileSet) *FileGenerator {
-	return &FileGenerator{
-		fset: fset,
-	}
-}
-
 type Bundler struct {
-	depAnalyzer   *DependencyAnalyzer
-	astTransformer *ASTTransformer
-	fileGenerator *FileGenerator
-	dependencies  []string
-	usedSymbols   map[string]map[string]bool
+	fset         *token.FileSet
+	pkgCache     map[string]*packages.Package
+	dependencies []string
+	usedSymbols  map[string]map[string]bool
 }
 
 func NewBundler() *Bundler {
-	depAnalyzer := NewDependencyAnalyzer()
 	return &Bundler{
-		depAnalyzer:    depAnalyzer,
-		astTransformer: NewASTTransformer(depAnalyzer.fset),
-		fileGenerator:  NewFileGenerator(depAnalyzer.fset),
-		usedSymbols:    make(map[string]map[string]bool),
+		fset:        token.NewFileSet(),
+		pkgCache:    make(map[string]*packages.Package),
+		usedSymbols: make(map[string]map[string]bool),
 	}
 }
 
@@ -92,10 +57,10 @@ func (b *Bundler) Bundle(inputFile, outputFile string) error {
 	return nil
 }
 
-func (da *DependencyAnalyzer) AnalyzeDependencies(inputFile string) ([]string, error) {
+func (b *Bundler) analyzeDependencies(inputFile string) error {
 	absPath, err := filepath.Abs(inputFile)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	cfg := &packages.Config{
@@ -107,56 +72,46 @@ func (da *DependencyAnalyzer) AnalyzeDependencies(inputFile string) ([]string, e
 
 	pkgs, err := packages.Load(cfg, ".")
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if len(pkgs) == 0 {
-		return nil, fmt.Errorf("no packages found")
+		return fmt.Errorf("no packages found")
 	}
 
 	mainPkg := pkgs[0]
 	if packages.PrintErrors(pkgs) > 0 {
-		return nil, fmt.Errorf("package loading errors occurred")
+		return fmt.Errorf("package loading errors occurred")
 	}
 
-	var dependencies []string
-	da.collectDependencies(mainPkg, make(map[string]bool), &dependencies)
+	b.collectDependencies(mainPkg, make(map[string]bool))
 	
-	sort.Strings(dependencies)
-	return dependencies, nil
-}
-
-func (b *Bundler) analyzeDependencies(inputFile string) error {
-	deps, err := b.depAnalyzer.AnalyzeDependencies(inputFile)
-	if err != nil {
-		return err
-	}
-	b.dependencies = deps
+	sort.Strings(b.dependencies)
 	return nil
 }
 
-func (da *DependencyAnalyzer) collectDependencies(pkg *packages.Package, visited map[string]bool, dependencies *[]string) {
+func (b *Bundler) collectDependencies(pkg *packages.Package, visited map[string]bool) {
 	if visited[pkg.PkgPath] {
 		return
 	}
 	visited[pkg.PkgPath] = true
 
-	da.pkgCache[pkg.PkgPath] = pkg
+	b.pkgCache[pkg.PkgPath] = pkg
 
 	for _, imp := range pkg.Imports {
-		if da.isStandardLibrary(imp.PkgPath) {
+		if b.isStandardLibrary(imp.PkgPath) {
 			continue
 		}
 		
-		if !contains(*dependencies, imp.PkgPath) {
-			*dependencies = append(*dependencies, imp.PkgPath)
+		if !b.contains(b.dependencies, imp.PkgPath) {
+			b.dependencies = append(b.dependencies, imp.PkgPath)
 		}
 		
-		da.collectDependencies(imp, visited, dependencies)
+		b.collectDependencies(imp, visited)
 	}
 }
 
-func (da *DependencyAnalyzer) isStandardLibrary(pkgPath string) bool {
+func (b *Bundler) isStandardLibrary(pkgPath string) bool {
 	// Standard library packages don't contain dots and follow specific patterns
 	if strings.Contains(pkgPath, ".") {
 		return false
@@ -190,7 +145,7 @@ func (da *DependencyAnalyzer) isStandardLibrary(pkgPath string) bool {
 	return false
 }
 
-func contains(slice []string, item string) bool {
+func (b *Bundler) contains(slice []string, item string) bool {
 	for _, s := range slice {
 		if s == item {
 			return true

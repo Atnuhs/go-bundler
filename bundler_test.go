@@ -154,7 +154,7 @@ go 1.21`
 	}
 	
 	for _, element := range expectedElements {
-		if !contains(contentStr, element) {
+		if !containsString(contentStr, element) {
 			t.Errorf("Output missing expected element: %q", element)
 		}
 	}
@@ -243,7 +243,7 @@ func TestBundler_Bundle_WithDependencies(t *testing.T) {
 	}
 	
 	for _, element := range expectedElements {
-		if !contains(contentStr, element) {
+		if !containsString(contentStr, element) {
 			t.Errorf("Output missing expected element: %q", element)
 		}
 	}
@@ -345,7 +345,7 @@ func TestBundler_Bundle_WithRemoteDependencies(t *testing.T) {
 	}
 	
 	for _, element := range expectedElements {
-		if !contains(contentStr, element) {
+		if !containsString(contentStr, element) {
 			t.Errorf("Output missing expected element: %q", element)
 		}
 	}
@@ -394,7 +394,7 @@ func TestBundler_DeadCodeElimination_CurrentLimitations(t *testing.T) {
 	}
 	
 	for _, expected := range expectedPresent {
-		if !contains(contentStr, expected) {
+		if !containsString(contentStr, expected) {
 			t.Errorf("Expected used symbol %q should be present but not found", expected)
 		}
 	}
@@ -419,7 +419,7 @@ func TestBundler_DeadCodeElimination_CurrentLimitations(t *testing.T) {
 	
 	absentCount := 0
 	for _, shouldBeAbsent := range expectedAbsent {
-		if !contains(contentStr, shouldBeAbsent) {
+		if !containsString(contentStr, shouldBeAbsent) {
 			absentCount++
 		} else {
 			t.Logf("LIMITATION: Unused symbol %q is present (should be eliminated)", shouldBeAbsent)
@@ -472,7 +472,7 @@ func copyDir(src, dst string) error {
 	})
 }
 
-func contains(s, substr string) bool {
+func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || 
 		findSubstring(s, substr) != -1)
 }
