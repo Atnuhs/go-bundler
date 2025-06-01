@@ -1,0 +1,15 @@
+# Bundled output files
+testdata/**/bundled.go
+testdata/**/submit.go
+testdata/**/result.go
+testdata/**/output.go
+
+# Binaries
+/summarizer
+
+# Go test output
+*.test
+*.out
+
+# Go module cache
+go.mod.cache
