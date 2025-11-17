@@ -1,6 +1,11 @@
 package main
 
+import "fmt"
 
 func main() {
-	println("Hello world")
+	inner()
+}
+
+func inner() {
+	fmt.Println("hoge")
 }
