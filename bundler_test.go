@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -16,21 +17,7 @@ func TestMain(m *testing.M) {
 
 func buildPackages(t *testing.T, dir string) []*packages.Package {
 	t.Helper()
-	absDir, _ := filepath.Abs(filepath.Join("testdata/src", dir))
-	cfg := &packages.Config{
-		Mode: packages.NeedName |
-			packages.NeedFiles |
-			packages.NeedSyntax |
-			packages.NeedTypes |
-			packages.NeedTypesInfo |
-			packages.NeedDeps |
-			packages.NeedModule |
-			packages.NeedCompiledGoFiles |
-			packages.NeedImports,
-		Dir:   absDir,
-		Tests: false,
-	}
-	pkgs, err := packages.Load(cfg, ".")
+	pkgs, err := loadPackages(filepath.Join("testdata/src", dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,14 +46,15 @@ func TestBundler(t *testing.T) {
 			pkgs := buildPackages(t, tt.testdir)
 
 			// execute
-			result, err := Bundle(pkgs)
+			buf := bytes.NewBuffer(make([]byte, 0, 1024))
+			err := Bundle(pkgs, buf)
 
 			// validate
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Bundle() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			// 結果の検証...
-			t.Log(result)
+			t.Log(buf.String())
 		})
 	}
 }

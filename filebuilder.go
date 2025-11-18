@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -88,7 +89,12 @@ func (b *FileBuilder) addFuncDecl(n *ast.FuncDecl) {
 	b.funcDecls = append(b.funcDecls, n)
 }
 
-func (b *FileBuilder) Build() *ast.File {
+func (b *FileBuilder) Build() (*ast.File, error) {
+	// check required values
+	if b.mainDecl == nil {
+		return nil, errors.New("main function not found")
+	}
+
 	file := &ast.File{
 		Name: ast.NewIdent("main"),
 	}
@@ -173,5 +179,5 @@ func (b *FileBuilder) Build() *ast.File {
 		file.Decls = append(file.Decls, d)
 	}
 
-	return file
+	return file, nil
 }
