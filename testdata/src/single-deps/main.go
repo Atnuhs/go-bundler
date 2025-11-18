@@ -53,7 +53,8 @@ func SeekerSeek(s Seeker) {
 }
 
 func FunctionWithArg(x int) {
-	fmt.Println(x)
+	var inner = 1
+	fmt.Println(x, inner)
 }
 
 func main() {

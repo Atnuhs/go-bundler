@@ -174,7 +174,11 @@ func (b *Bundler) buildDeclFile() (*ast.File, error) {
 							if varSpec, ok := spec.(*ast.ValueSpec); ok {
 								var used bool
 								for _, name := range varSpec.Names {
-									if obj, ok := info.Defs[name]; ok && reachable[obj] {
+									obj, ok := info.Defs[name]
+									if !ok {
+										continue
+									}
+									if isPkgLevelVar(obj) && reachable[obj] {
 										used = true
 									}
 								}
@@ -257,7 +261,7 @@ func (b *Bundler) rewriteIdent(n *ast.Ident) {
 	if !ok {
 		return
 	}
-	if isTopLevelDecleated(pkg, info, n) {
+	if isPkgLevelIdent(pkg, info, n) {
 		if prefixAdded, ok := b.addPrefix(pkgPath(pkg.PkgPath), n); ok {
 			n.Name = prefixAdded
 			b.replaced[n] = prefixAdded
@@ -303,7 +307,19 @@ func (b *Bundler) infoOfNode(n ast.Node) (*packages.Package, *types.Info, bool) 
 	return nil, nil, false
 }
 
-func isTopLevelDecleated(pkg *packages.Package, info *types.Info, id *ast.Ident) bool {
+func isPkgLevelVar(obj types.Object) bool {
+	v, ok := obj.(*types.Var)
+	if !ok {
+		return false
+	}
+	pkg := v.Pkg()
+	if pkg == nil {
+		return false
+	}
+	return v.Parent() == pkg.Scope()
+}
+
+func isPkgLevelIdent(pkg *packages.Package, info *types.Info, id *ast.Ident) bool {
 	if id == nil || id.Name == "_" {
 		return false
 	}
