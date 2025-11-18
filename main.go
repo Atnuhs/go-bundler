@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 
 	"golang.org/x/tools/go/packages"
+	"golang.org/x/tools/imports"
 )
 
 var Level = new(slog.LevelVar)
@@ -28,8 +30,23 @@ func main() {
 		log.Fatalf("load packages: %v", err)
 	}
 
-	if err := Bundle(pkgs, os.Stdout); err != nil {
+	var raw bytes.Buffer
+
+	if err := Bundle(pkgs, &raw); err != nil {
 		log.Fatalf("bundle: %v", err)
+	}
+
+	// format with goimports
+	formatted, err := imports.Process("main.go", raw.Bytes(), &imports.Options{
+		Comments:  true,
+		TabIndent: true,
+		TabWidth:  4,
+	})
+	if err != nil {
+		log.Fatalf("goimports: %v", err)
+	}
+	if _, err := os.Stdout.Write(formatted); err != nil {
+		log.Fatalf("write stdout: %v", err)
 	}
 }
 
