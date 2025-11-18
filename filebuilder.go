@@ -118,24 +118,26 @@ func (b *FileBuilder) Build() (*ast.File, error) {
 	}
 
 	// add inits
-	initDecl := &ast.FuncDecl{
-		Name: ast.NewIdent("init"),
-		Type: &ast.FuncType{
-			Params: &ast.FieldList{},
-		},
-		Body: &ast.BlockStmt{
-			List: []ast.Stmt{},
-		},
-	}
-	file.Decls = append(file.Decls, initDecl)
-	for _, d := range b.initDecls {
-		stmt := &ast.ExprStmt{
-			X: &ast.CallExpr{
-				Fun: d.Name,
+	if len(b.initDecls) > 0 {
+		initDecl := &ast.FuncDecl{
+			Name: ast.NewIdent("init"),
+			Type: &ast.FuncType{
+				Params: &ast.FieldList{},
+			},
+			Body: &ast.BlockStmt{
+				List: []ast.Stmt{},
 			},
 		}
-		initDecl.Body.List = append(initDecl.Body.List, stmt)
-		file.Decls = append(file.Decls, d)
+		file.Decls = append(file.Decls, initDecl)
+		for _, d := range b.initDecls {
+			stmt := &ast.ExprStmt{
+				X: &ast.CallExpr{
+					Fun: d.Name,
+				},
+			}
+			initDecl.Body.List = append(initDecl.Body.List, stmt)
+			file.Decls = append(file.Decls, d)
+		}
 	}
 
 	// add types
