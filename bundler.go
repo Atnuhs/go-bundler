@@ -377,6 +377,18 @@ func isPkgSelector(sel *ast.SelectorExpr, info *types.Info) (pkgPath, bool) {
 	return pp, true
 }
 
+func namedTypeOf(t types.Type) *types.Named {
+	switch tt := t.(type) {
+	case *types.Named:
+		return tt
+	case *types.Pointer:
+		if n, ok := tt.Elem().(*types.Named); ok {
+			return n
+		}
+	}
+	return nil
+}
+
 func isEmbeddedSel(sel *ast.SelectorExpr, info *types.Info) (pkgPath, bool) {
 	s := info.Selections[sel]
 	if s == nil || s.Kind() != types.FieldVal {
@@ -388,15 +400,7 @@ func isEmbeddedSel(sel *ast.SelectorExpr, info *types.Info) (pkgPath, bool) {
 		return "", false
 	}
 
-	var named *types.Named
-	switch tt := v.Type().(type) {
-	case *types.Named:
-		named = tt
-	case *types.Pointer:
-		if n, ok := tt.Elem().(*types.Named); ok {
-			named = n
-		}
-	}
+	named := namedTypeOf(v.Type())
 	if named == nil {
 		return "", false
 	}
@@ -438,17 +442,7 @@ func isEmbeddedFieldKey(id *ast.Ident, info *types.Info) (pkgPath, bool) {
 		return "", false
 	}
 
-	t := obj.Type()
-	var named *types.Named
-	switch tt := t.(type) {
-	case *types.Named:
-		named = tt
-	case *types.Pointer:
-		if n, ok := tt.Elem().(*types.Named); ok {
-			named = n
-		}
-	}
-
+	named := namedTypeOf(obj.Type())
 	if named == nil {
 		return "", false
 	}
