@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -13,16 +12,13 @@ import (
 	"golang.org/x/tools/imports"
 )
 
-var Level = new(slog.LevelVar)
-
-func init() {
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: Level,
-	})))
-}
+var (
+	withMetrics               = flag.Bool("with-metrics", false, "emit go-bundler metrics comment block")
+	withSustainabilityMetrics = flag.Bool("with-sustainability-metrics", false, "emit sustainability metrics (CO2, trees) in comment block")
+	dir                       = flag.String("dir", ".", "target package directory")
+)
 
 func main() {
-	dir := flag.String("dir", ".", "target package directory")
 	flag.Parse()
 
 	pkgs, err := loadPackages(*dir)
@@ -48,9 +44,18 @@ func main() {
 	}
 	bundledLines := bytes.Count(formatted, []byte{'\n'})
 
-	// output 
-	WriteHeader(os.Stdout, originalLines, bundledLines)
-	if _, err := os.Stdout.Write(formatted); err != nil {
+	// output
+	w := os.Stdout
+	g := NewMetricWriter(originalLines, bundledLines)
+	g.WriteHeader(w)
+	if *withMetrics {
+		g.WriteMetrics(w)
+	}
+	if *withSustainabilityMetrics {
+		g.WriteSustainabilityMetrics(w)
+	}
+	g.WriteProjectURL(w)
+	if _, err := w.Write(formatted); err != nil {
 		log.Fatalf("write stdout: %v", err)
 	}
 }

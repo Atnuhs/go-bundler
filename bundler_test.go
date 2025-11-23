@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,7 +10,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	Level.Set(slog.LevelDebug)
 	os.Exit(m.Run())
 }
 
@@ -47,7 +45,7 @@ func TestBundler(t *testing.T) {
 
 			// execute
 			buf := bytes.NewBuffer(make([]byte, 0, 1024))
-			err := Bundle(pkgs, buf)
+			_, err := Bundle(pkgs, buf)
 
 			// validate
 			if (err != nil) != tt.wantErr {
