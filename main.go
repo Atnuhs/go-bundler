@@ -26,14 +26,14 @@ func main() {
 		log.Fatalf("load packages: %v", err)
 	}
 
-	// execute summarize
+	// bundle into a single source file
 	var raw bytes.Buffer
 	originalLines, err := Bundle(pkgs, &raw)
 	if err != nil {
 		log.Fatalf("bundle: %v", err)
 	}
 
-	// format with goimports
+	// format bundled source file with goimports
 	formatted, err := imports.Process("main.go", raw.Bytes(), &imports.Options{
 		Comments:  true,
 		TabIndent: true,
@@ -44,7 +44,7 @@ func main() {
 	}
 	bundledLines := bytes.Count(formatted, []byte{'\n'})
 
-	// output
+	// output formatted file
 	w := os.Stdout
 	g := NewMetricWriter(originalLines, bundledLines)
 	g.WriteHeader(w)
