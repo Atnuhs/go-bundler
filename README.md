@@ -10,7 +10,7 @@ go install github.com/Atnuhs/go-bundler@latest
 
 ## Usage
 
-```go
+```bash
 go-bundler -dir ./path/to/your/package > bundled.go
 ```
 
@@ -47,7 +47,7 @@ Emit a bundled file with line-count metrics and sustainability metrics:
 go-bundler -dir ./cmd/app -with-metrics -with-sustainability-metrics > bundled.go
 ```
 
-When -with-sustainability-metrics is enabled, go-bundler appends an additional metrics block that
+When `-with-sustainability-metrics` is enabled, `go-bundler` appends an additional metrics block that
 
 includes a rough model-based estimate of CO2 reduction and an equivalent number of trees planted.
 
