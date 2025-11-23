@@ -32,7 +32,8 @@ func main() {
 
 	// execute summarize
 	var raw bytes.Buffer
-	if err := Bundle(pkgs, &raw); err != nil {
+	originalLines, err := Bundle(pkgs, &raw)
+	if err != nil {
 		log.Fatalf("bundle: %v", err)
 	}
 
@@ -45,6 +46,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("goimports: %v", err)
 	}
+	bundledLines := bytes.Count(formatted, []byte{'\n'})
+
+	// output 
+	WriteHeader(os.Stdout, originalLines, bundledLines)
 	if _, err := os.Stdout.Write(formatted); err != nil {
 		log.Fatalf("write stdout: %v", err)
 	}
