@@ -16,12 +16,9 @@ func AnalyzeReachableDecls(main *packages.Package, topoPkg []*packages.Package) 
 		mainPkg:     main,
 		topoPkgs:    topoPkg,
 		reachableFn: make(map[*ssa.Function]bool, 128),
-		declRoots:   make(map[types.Object]bool, 128),
 	}
 	a.buildSSA()
 	a.analyzeRTA()
-	a.buildNodeToFn()
-	a.collectReferencedDecls()
 	a.buildDeclGraph()
 	a.propagateDeclReachability()
 	return a.reachableDecls
@@ -36,9 +33,7 @@ type ReachabilityAnalyzer struct {
 	prog        *ssa.Program
 	ssaPkgs     []*ssa.Package
 	reachableFn map[*ssa.Function]bool
-	nodeToFn    map[ast.Node]*ssa.Function
 	declGraph   map[types.Object][]types.Object
-	declRoots   map[types.Object]bool
 
 	// output
 	reachableDecls map[types.Object]bool
@@ -48,7 +43,6 @@ func (a *ReachabilityAnalyzer) buildSSA() {
 	prog, ssaPkgs := ssautil.AllPackages([]*packages.Package{a.mainPkg}, ssa.InstantiateGenerics)
 	prog.Build()
 
-	// cache
 	a.prog = prog
 	a.ssaPkgs = ssaPkgs
 }
@@ -61,37 +55,6 @@ func (a *ReachabilityAnalyzer) analyzeRTA() {
 	}
 	for fn := range res.Reachable {
 		a.reachableFn[fn] = true
-	}
-}
-
-func (a *ReachabilityAnalyzer) buildNodeToFn() {
-	a.nodeToFn = make(map[ast.Node]*ssa.Function, 128)
-	for _, ssaPkg := range a.ssaPkgs {
-		for _, mem := range ssaPkg.Members {
-			if fn, ok := mem.(*ssa.Function); ok {
-				if syn := fn.Syntax(); syn != nil {
-					a.nodeToFn[syn] = fn
-				}
-			}
-		}
-	}
-}
-
-func (a *ReachabilityAnalyzer) collectReferencedDecls() {
-	for _, p := range a.topoPkgs {
-		info := p.TypesInfo
-		if info == nil {
-			continue
-		}
-		for _, f := range p.Syntax {
-			v := &declUseVisitor{
-				info:          info,
-				nodeToFn:      a.nodeToFn,
-				reachableFunc: a.reachableFn,
-				reachableDecl: a.declRoots,
-			}
-			ast.Walk(v, f)
-		}
 	}
 }
 
@@ -154,13 +117,11 @@ func (a *ReachabilityAnalyzer) inspectDeclBody(info *types.Info, parents []types
 		}
 		return true
 	})
-
 }
 
 func (a *ReachabilityAnalyzer) propagateDeclReachability() {
-	a.reachableDecls = make(map[types.Object]bool, len(a.declRoots))
-	// seed reachable decls
-	queue := make([]types.Object, 0, len(a.declRoots))
+	a.reachableDecls = make(map[types.Object]bool, len(a.reachableFn))
+	queue := make([]types.Object, 0, len(a.reachableFn))
 	for f := range a.reachableFn {
 		if obj := f.Object(); obj != nil {
 			if f.Pkg != nil && !isStd(pkgPath(f.Pkg.Pkg.Path())) {
@@ -169,10 +130,9 @@ func (a *ReachabilityAnalyzer) propagateDeclReachability() {
 		}
 	}
 
-	// bfs
 	for len(queue) > 0 {
 		cur := queue[0]
-		queue = queue[1:] // pop
+		queue = queue[1:]
 		if a.reachableDecls[cur] {
 			continue
 		}
@@ -188,7 +148,7 @@ func (a *ReachabilityAnalyzer) propagateDeclReachability() {
 
 		for _, next := range a.declGraph[cur] {
 			if !a.reachableDecls[next] {
-				queue = append(queue, next) // push
+				queue = append(queue, next)
 			}
 		}
 	}
@@ -202,7 +162,7 @@ func methodOfType(tn *types.TypeName) []types.Object {
 	if named.Obj().Pkg() == nil {
 		return nil
 	}
-	ret := make([]types.Object, 0)
+	ret := make([]types.Object, 0, named.NumMethods())
 	for i := 0; i < named.NumMethods(); i++ {
 		ret = append(ret, named.Method(i))
 	}
@@ -210,7 +170,7 @@ func methodOfType(tn *types.TypeName) []types.Object {
 }
 
 func rootsPkgs(pkgs []*ssa.Package) []*ssa.Function {
-	roots := make([]*ssa.Function, 0, 128)
+	roots := make([]*ssa.Function, 0, 2)
 	for _, p := range pkgs {
 		if p == nil || p.Pkg.Name() != "main" {
 			continue
@@ -221,75 +181,6 @@ func rootsPkgs(pkgs []*ssa.Package) []*ssa.Function {
 		if f := p.Func("main"); f != nil {
 			roots = append(roots, f)
 		}
-
 	}
 	return roots
-}
-
-type declUseVisitor struct {
-	info          *types.Info
-	nodeToFn      map[ast.Node]*ssa.Function
-	reachableFunc map[*ssa.Function]bool
-	reachableDecl map[types.Object]bool
-
-	// Visitの処理で今見ているnodeの全祖先をstackで管理している
-	stack []ast.Node
-	// stackに貯められた祖先の中で、reachableな関数のstackスライスでのindexを持っている
-	fnStack []*ssa.Function
-}
-
-func (v *declUseVisitor) push(n ast.Node) {
-	v.stack = append(v.stack, n)
-	if fn, ok := v.nodeToFn[n]; ok {
-		v.fnStack = append(v.fnStack, fn)
-	}
-}
-
-func (v *declUseVisitor) pop() {
-	if len(v.stack) == 0 {
-		return
-	}
-
-	poped := v.stack[len(v.stack)-1]
-	v.stack = v.stack[:len(v.stack)-1]
-
-	if fn, ok := v.nodeToFn[poped]; ok && len(v.fnStack) > 0 {
-		if v.fnStack[len(v.fnStack)-1] == fn {
-			v.fnStack = v.fnStack[:len(v.fnStack)-1]
-		}
-	}
-}
-
-func (v *declUseVisitor) curFn() *ssa.Function {
-	if len(v.fnStack) == 0 {
-		return nil
-	}
-	return v.fnStack[len(v.fnStack)-1]
-}
-
-func (v *declUseVisitor) Visit(n ast.Node) ast.Visitor {
-	// nがnilなのはそのサブツリーを抜ける時
-	if n == nil {
-		v.pop()
-		return v
-	}
-
-	// nodeに入るタイミング
-	v.push(n)
-
-	// reachableな関数で利用のある要素なら、reachableDeclに追加
-	id, ok := n.(*ast.Ident)
-	if !ok {
-		return v
-	}
-
-	obj := v.info.Uses[id]
-	if obj == nil {
-		return v
-	}
-
-	if cur := v.curFn(); cur != nil || v.reachableFunc[cur] {
-		v.reachableDecl[obj] = true
-	}
-	return v
 }

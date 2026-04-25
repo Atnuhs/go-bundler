@@ -16,7 +16,6 @@ import (
 )
 
 type (
-	pkgName   string
 	pkgPath   string
 	pkgPrefix string
 )
@@ -112,9 +111,9 @@ func (b *Bundler) countTotalLine() {
 }
 
 func (b *Bundler) generatePrefixes() {
-	pkgPathsByPkgName := make(map[pkgName][]pkgPath)
+	pkgPathsByPkgName := make(map[string][]pkgPath)
 	for _, now := range b.topoPkgs {
-		name, path := pkgName(now.Name), pkgPath(now.PkgPath)
+		name, path := now.Name, pkgPath(now.PkgPath)
 		pkgPathsByPkgName[name] = append(pkgPathsByPkgName[name], path)
 	}
 
@@ -179,7 +178,7 @@ func (b *Bundler) buildDeclFile() (*ast.File, error) {
 							if varSpec, ok := spec.(*ast.ValueSpec); ok {
 								var used bool
 								for _, name := range varSpec.Names {
-									if obj, ok := info.Defs[name]; ok && isPkgLevelVar(obj) && reachable[obj] {
+									if obj, ok := info.Defs[name]; ok && isPkgLevel(obj) && reachable[obj] {
 										used = true
 									}
 								}
@@ -193,7 +192,7 @@ func (b *Bundler) buildDeclFile() (*ast.File, error) {
 						for _, spec := range v.Specs {
 							if constSpec, ok := spec.(*ast.ValueSpec); ok {
 								for _, name := range constSpec.Names {
-									if obj, ok := info.Defs[name]; ok && isPkgLevelConst(obj) && reachable[obj] {
+									if obj, ok := info.Defs[name]; ok && isPkgLevel(obj) && reachable[obj] {
 										used = true
 									}
 								}
@@ -314,28 +313,12 @@ func (b *Bundler) infoOfNode(n ast.Node) (*packages.Package, *types.Info, bool) 
 	return nil, nil, false
 }
 
-func isPkgLevelVar(obj types.Object) bool {
-	v, ok := obj.(*types.Var)
-	if !ok {
-		return false
-	}
-	pkg := v.Pkg()
+func isPkgLevel(obj types.Object) bool {
+	pkg := obj.Pkg()
 	if pkg == nil {
 		return false
 	}
-	return v.Parent() == pkg.Scope()
-}
-
-func isPkgLevelConst(obj types.Object) bool {
-	v, ok := obj.(*types.Const)
-	if !ok {
-		return false
-	}
-	pkg := v.Pkg()
-	if pkg == nil {
-		return false
-	}
-	return v.Parent() == pkg.Scope()
+	return obj.Parent() == pkg.Scope()
 }
 
 func isFuncNonMethod(obj types.Object) bool {
