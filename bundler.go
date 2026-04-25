@@ -275,6 +275,20 @@ func (b *Bundler) rewriteIdent(n *ast.Ident) {
 		return
 	}
 
+	// dot-imported: ident is in pkg's file but defined in a different non-std package
+	if obj := info.Uses[n]; obj != nil {
+		if objPkg := obj.Pkg(); objPkg != nil && objPkg != pkg.Types && obj.Parent() == objPkg.Scope() {
+			pp := pkgPath(objPkg.Path())
+			if !isStd(pp) {
+				if prefixAdded, ok := b.addPrefix(pp, n); ok {
+					n.Name = prefixAdded
+					b.replaced[n] = prefixAdded
+				}
+				return
+			}
+		}
+	}
+
 	if pp, ok := isEmbeddedFieldKey(n, info); ok {
 		if prefixAdded, ok := b.addPrefix(pp, n); ok {
 			n.Name = prefixAdded

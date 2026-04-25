@@ -89,14 +89,46 @@ func TestTreeShaking(t *testing.T) {
 
 	assertContains(t, output, "lib_UsedFunc")
 	assertNotContains(t, output, "lib_UnusedFunc")
+
+	// call-site renaming
+	assertContains(t, output, "lib_UsedFunc()")
 }
 
 func TestDotImport(t *testing.T) {
 	output := bundleDir(t, "dot-import")
 
+	// declarations
 	assertContains(t, output, "lib_LibFunc")
 	assertContains(t, output, "lib_LibStruct")
+	assertContains(t, output, "lib_LibVar")
+	assertContains(t, output, "lib_LibConst")
+	assertContains(t, output, "lib_LibInterface")
 	assertNotContains(t, output, ". \"")
+
+	// call-site renaming: dot-imported idents must also be renamed at usage
+	assertContains(t, output, "defer lib_LibFunc()")
+	assertContains(t, output, "lib_LibStruct{")
+	assertContains(t, output, "_ = lib_LibVar")
+	// const
+	assertContains(t, output, "_ = lib_LibConst")
+	// type annotation
+	assertContains(t, output, "var _ lib_LibInterface = nil")
+	// type assertion
+	assertContains(t, output, "any(s).(lib_LibInterface)")
+	// function signature (param and return type)
+	assertContains(t, output, "func main_useLib(x lib_LibStruct) lib_LibStruct")
+}
+
+func TestDotImportMulti(t *testing.T) {
+	output := bundleDir(t, "dot-import-multi")
+
+	assertNotContains(t, output, ". \"")
+
+	// 2つの異なるパッケージをドットインポートしたとき、それぞれ正しいプレフィックスになる
+	assertContains(t, output, "liba_FuncA")
+	assertContains(t, output, "libb_FuncB")
+	assertContains(t, output, "liba_TypeA")
+	assertContains(t, output, "libb_TypeB")
 }
 
 func TestNameCollision(t *testing.T) {
@@ -106,4 +138,8 @@ func TestNameCollision(t *testing.T) {
 	// liba → lib_00, libb → lib_01
 	assertContains(t, output, "lib_00_FuncA")
 	assertContains(t, output, "lib_01_FuncB")
+
+	// call-site renaming
+	assertContains(t, output, "lib_00_FuncA()")
+	assertContains(t, output, "lib_01_FuncB()")
 }
