@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -16,36 +17,66 @@ var (
 	withMetrics               = flag.Bool("with-metrics", false, "emit go-bundler metrics comment block")
 	withSustainabilityMetrics = flag.Bool("with-sustainability-metrics", false, "emit sustainability metrics (CO2, trees) in comment block")
 	dir                       = flag.String("dir", ".", "target package directory")
+	watchMode                 = flag.Bool("watch", false, "watch local package files and rebuild on change (requires -o)")
+	out                       string
 )
+
+func init() {
+	flag.StringVar(&out, "out", "", "output file path (default: stdout)")
+	flag.StringVar(&out, "o", "", "output file path (shorthand)")
+}
 
 func main() {
 	flag.Parse()
 
-	pkgs, err := loadPackages(*dir)
-	if err != nil {
-		log.Fatalf("load packages: %v", err)
+	if *watchMode {
+		if out == "" {
+			log.Fatal("-watch requires -o/--out to be set")
+		}
+		if err := runWatch(); err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 
-	// bundle into a single source file
+	if _, err := runOnce(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// runOnce performs one full bundle pass and returns the local module
+// package directories observed during load (for the watcher to monitor).
+func runOnce() ([]string, error) {
+	pkgs, err := loadPackages(*dir)
+	if err != nil {
+		return nil, fmt.Errorf("load packages: %w", err)
+	}
+
 	var raw bytes.Buffer
 	originalLines, err := Bundle(pkgs, &raw)
 	if err != nil {
-		log.Fatalf("bundle: %v", err)
+		return nil, fmt.Errorf("bundle: %w", err)
 	}
 
-	// format bundled source file with goimports
 	formatted, err := imports.Process("main.go", raw.Bytes(), &imports.Options{
 		Comments:  true,
 		TabIndent: true,
 		TabWidth:  4,
 	})
 	if err != nil {
-		log.Fatalf("goimports: %v", err)
+		return nil, fmt.Errorf("goimports: %w", err)
 	}
 	bundledLines := bytes.Count(formatted, []byte{'\n'})
 
-	// output formatted file
-	w := os.Stdout
+	var w io.Writer = os.Stdout
+	if out != "" {
+		f, err := os.Create(out)
+		if err != nil {
+			return nil, fmt.Errorf("create output file: %w", err)
+		}
+		defer f.Close()
+		w = f
+	}
 	g := NewMetricWriter(originalLines, bundledLines)
 	g.WriteHeader(w)
 	if *withMetrics {
@@ -56,8 +87,10 @@ func main() {
 	}
 	g.WriteProjectURL(w)
 	if _, err := w.Write(formatted); err != nil {
-		log.Fatalf("write stdout: %v", err)
+		return nil, fmt.Errorf("write output: %w", err)
 	}
+
+	return localPackageDirs(pkgs), nil
 }
 
 func loadPackages(dir string) ([]*packages.Package, error) {
