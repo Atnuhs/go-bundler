@@ -461,6 +461,39 @@ func isEmbeddedFieldKey(id *ast.Ident, info *types.Info) (pkgPath, bool) {
 	return pp, true
 }
 
+// localPackageDirs returns unique directories containing Go source files
+// from packages belonging to the same module as the root package(s).
+// Standard library and third-party module sources are excluded.
+func localPackageDirs(pkgs []*packages.Package) []string {
+	var rootModPath string
+	for _, p := range pkgs {
+		if p.Module != nil {
+			rootModPath = p.Module.Path
+			break
+		}
+	}
+	if rootModPath == "" {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var dirs []string
+	packages.Visit(pkgs, func(p *packages.Package) bool {
+		if p.Module == nil || p.Module.Path != rootModPath {
+			return false
+		}
+		for _, f := range p.GoFiles {
+			d := filepath.Dir(f)
+			if !seen[d] {
+				seen[d] = true
+				dirs = append(dirs, d)
+			}
+		}
+		return true
+	}, nil)
+	return dirs
+}
+
 func totalLineInPackage(pkg *packages.Package) int {
 	total := 0
 	seen := make(map[*token.File]bool)

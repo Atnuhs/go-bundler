@@ -6,12 +6,10 @@ import (
 	"log"
 	"os/signal"
 	"path/filepath"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"golang.org/x/tools/go/packages"
 )
 
 const debounceInterval = 200 * time.Millisecond
@@ -32,55 +30,62 @@ func runWatch() error {
 	}
 
 	watched := make(map[string]bool)
-
-	build := func() {
+	runBuild := func() {
 		start := time.Now()
-		var (
-			dirs []string
-			err  error
-		)
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					err = fmt.Errorf("bundler panicked (likely invalid Go in source): %v", r)
-				}
-			}()
-			dirs, err = runOnce()
-		}()
+		dirs, err := safeRunOnce()
 		if err != nil {
 			log.Printf("rebuild failed: %v", err)
 			return
 		}
-		log.Printf("rebuilt %s in %s", out, time.Since(start).Round(time.Millisecond))
 		reconcileWatches(watcher, watched, dirs)
+		log.Printf("rebuilt %s in %s; watching %d directories",
+			out, time.Since(start).Round(time.Millisecond), len(watched))
 	}
 
-	// initial build
-	log.Printf("watching: starting initial build")
-	build()
-	log.Printf("watching %d directories; press Ctrl+C to stop", len(watched))
+	// Builds run serially on a dedicated goroutine so reconcileWatches
+	// never mutates `watched` concurrently. trigger is a coalescing
+	// channel: while a build is in flight, additional requests collapse
+	// into at most one pending build.
+	trigger := make(chan struct{}, 1)
+	buildDone := make(chan struct{})
+	go func() {
+		defer close(buildDone)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-trigger:
+				runBuild()
+			}
+		}
+	}()
+	requestBuild := func() {
+		select {
+		case trigger <- struct{}{}:
+		default:
+		}
+	}
 
-	var (
-		timerMu sync.Mutex
-		timer   *time.Timer
-	)
+	log.Print("starting initial build; press Ctrl+C to stop")
+	requestBuild()
+
+	// timer is only touched from this goroutine (schedule + cleanup),
+	// so no mutex is required.
+	var timer *time.Timer
 	schedule := func() {
-		timerMu.Lock()
-		defer timerMu.Unlock()
 		if timer != nil {
 			timer.Stop()
 		}
-		timer = time.AfterFunc(debounceInterval, build)
+		timer = time.AfterFunc(debounceInterval, requestBuild)
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			timerMu.Lock()
 			if timer != nil {
 				timer.Stop()
 			}
-			timerMu.Unlock()
+			<-buildDone
 			log.Println("stopping watcher")
 			return nil
 		case ev, ok := <-watcher.Events:
@@ -100,6 +105,18 @@ func runWatch() error {
 	}
 }
 
+// safeRunOnce wraps runOnce with a recover so a panic in the bundler
+// (typically caused by syntactically invalid source during editing) does
+// not kill the watcher.
+func safeRunOnce() (dirs []string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("bundler panicked (likely invalid Go in source): %v", r)
+		}
+	}()
+	return runOnce()
+}
+
 func shouldHandle(ev fsnotify.Event, outAbs string) bool {
 	if filepath.Ext(ev.Name) != ".go" {
 		return false
@@ -108,10 +125,8 @@ func shouldHandle(ev fsnotify.Event, outAbs string) bool {
 	if ev.Op == fsnotify.Chmod {
 		return false
 	}
-	if outAbs != "" {
-		if abs, err := filepath.Abs(ev.Name); err == nil && abs == outAbs {
-			return false
-		}
+	if abs, err := filepath.Abs(ev.Name); err == nil && abs == outAbs {
+		return false
 	}
 	return true
 }
@@ -134,37 +149,4 @@ func reconcileWatches(w *fsnotify.Watcher, current map[string]bool, want []strin
 			delete(current, d)
 		}
 	}
-}
-
-// localPackageDirs returns unique directories containing Go source files
-// from packages belonging to the same module as the root package(s).
-// Standard library and third-party module sources are excluded.
-func localPackageDirs(pkgs []*packages.Package) []string {
-	var rootModPath string
-	for _, p := range pkgs {
-		if p.Module != nil {
-			rootModPath = p.Module.Path
-			break
-		}
-	}
-	if rootModPath == "" {
-		return nil
-	}
-
-	seen := make(map[string]bool)
-	var dirs []string
-	packages.Visit(pkgs, func(p *packages.Package) bool {
-		if p.Module == nil || p.Module.Path != rootModPath {
-			return false
-		}
-		for _, f := range p.GoFiles {
-			d := filepath.Dir(f)
-			if !seen[d] {
-				seen[d] = true
-				dirs = append(dirs, d)
-			}
-		}
-		return true
-	}, nil)
-	return dirs
 }
