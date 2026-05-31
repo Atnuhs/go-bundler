@@ -1,5 +1,7 @@
 # go-bundler
 
+🇯🇵 日本語版: [README.ja.md](README.ja.md)
+
 Documentation: <https://atnuhs.github.io/go-bundler/>  
 Article: <https://qiita.com/Authns/items/ddba6d392ec6a316383f>
 
@@ -12,7 +14,8 @@ where single-file submission is required.
 
 - Dead code elimination via RTA (Rapid Type Analysis)
 - Supports generics, embedded structs, and interface types
-- Single-command usage, outputs to stdout
+- Single-command usage, outputs to stdout or a file
+- Watch mode that rebuilds on file changes
 - Optional line-count and sustainability metrics
 
 ## Install
@@ -27,13 +30,19 @@ go install github.com/Atnuhs/go-bundler@latest
 go-bundler -dir ./path/to/your/package > bundled.go
 ```
 
-`go-bundler` bundles a Go package into a single source file. By default it only emits the bundled code.
+`go-bundler` bundles a Go package into a single source file. By default it only emits the bundled code to stdout.
 
-You can enable additional comment blocks with the following flags:
+You can write directly to a file with `-o`/`--out`, and rebuild automatically on changes with `-watch`:
 
 ```text
   -dir string
         target package directory (default ".")
+  -o string
+        output file path (shorthand for -out)
+  -out string
+        output file path (default: stdout)
+  -watch
+        watch local package files and rebuild on change (requires -o)
   -with-metrics
         emit go-bundler metrics comment block
   -with-sustainability-metrics
@@ -58,6 +67,18 @@ Emit a bundled file with line-count metrics and sustainability metrics:
 
 ```bash
 go-bundler -dir ./cmd/app -with-metrics -with-sustainability-metrics > bundled.go
+```
+
+Write directly to a file instead of redirecting stdout:
+
+```bash
+go-bundler -dir ./cmd/app -o bundled.go
+```
+
+Watch mode rebuilds `bundled.go` whenever any `.go` file in the resolved local packages changes (Ctrl+C to stop):
+
+```bash
+go-bundler -dir ./cmd/app -o bundled.go -watch
 ```
 
 When `-with-sustainability-metrics` is enabled, `go-bundler` appends an additional metrics block that

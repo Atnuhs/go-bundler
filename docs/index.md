@@ -5,6 +5,8 @@ description: A lightweight Go source bundler for competitive programming and AtC
 
 # go-bundler
 
+🇯🇵 日本語版: [ja/](ja/)
+
 **go-bundler** is a lightweight Go source bundler for competitive programming.
 
 It merges multiple Go source files into a single Go file, making it easier to
@@ -16,7 +18,8 @@ single-file submissions.
 - Bundle a Go package into a single source file
 - Dead code elimination via RTA (Rapid Type Analysis)
 - Supports generics, embedded structs, and interface types
-- Single-command usage, outputs to stdout
+- Single-command usage, outputs to stdout or a file
+- Watch mode that rebuilds on file changes
 - Optional line-count and sustainability metrics
 
 ## Install
@@ -36,6 +39,8 @@ go-bundler -dir ./path/to/your/package > submit.go
 | Flag | Description |
 |---|---|
 | `-dir` | Target package directory (default: `.`) |
+| `-o`, `-out` | Output file path (default: stdout) |
+| `-watch` | Watch local package files and rebuild on change (requires `-o`) |
 | `-with-metrics` | Emit line-count metrics as a comment block |
 | `-with-sustainability-metrics` | Emit CO2 and tree-equivalent metrics |
 
@@ -51,6 +56,18 @@ Bundle with line-count metrics:
 
 ```sh
 go-bundler -dir ./cmd/abc123 -with-metrics > submit.go
+```
+
+Write directly to a file instead of redirecting stdout:
+
+```sh
+go-bundler -dir ./cmd/abc123 -o submit.go
+```
+
+Watch mode rebuilds `submit.go` whenever any `.go` file in the resolved local packages changes (Ctrl+C to stop):
+
+```sh
+go-bundler -dir ./cmd/abc123 -o submit.go -watch
 ```
 
 ## Links
