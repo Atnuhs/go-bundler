@@ -31,14 +31,20 @@ func runWatch() error {
 
 	watched := make(map[string]bool)
 	runBuild := func() {
+		clearScreen()
 		start := time.Now()
+		fmt.Println(colorize("=== go-bundler watch rebuild ===", ansiBlue))
 		dirs, err := safeRunOnce()
 		if err != nil {
-			log.Printf("rebuild failed: %v", err)
+			fmt.Println(colorize("BUILD FAILED", ansiRed))
+			fmt.Printf("%v\n\n", err)
+			fmt.Printf("output unchanged: %s\n", out)
+			fmt.Printf("watching %d directories\n", len(watched))
 			return
 		}
 		reconcileWatches(watcher, watched, dirs)
-		log.Printf("rebuilt %s in %s; watching %d directories",
+		fmt.Println(colorize("BUILD SUCCEEDED", ansiGreen))
+		fmt.Printf("rebuilt %s in %s; watching %d directories\n",
 			out, time.Since(start).Round(time.Millisecond), len(watched))
 	}
 
@@ -115,6 +121,22 @@ func safeRunOnce() (dirs []string, err error) {
 		}
 	}()
 	return runOnce()
+}
+
+const (
+	ansiClear = "\033[H\033[2J"
+	ansiRed   = "\033[31m"
+	ansiGreen = "\033[32m"
+	ansiBlue  = "\033[34m"
+	ansiReset = "\033[0m"
+)
+
+func clearScreen() {
+	fmt.Print(ansiClear)
+}
+
+func colorize(text, color string) string {
+	return color + text + ansiReset
 }
 
 func shouldHandle(ev fsnotify.Event, outAbs string) bool {
